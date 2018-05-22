@@ -1,4 +1,5 @@
 %% Crea una taula amb els descriptors de totes les imatges i el seu resultat
+%Resultat en la variable: Dataset
 
 imgdir = 'imatges/';
 classes = dir(imgdir);

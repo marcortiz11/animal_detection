@@ -1,39 +1,55 @@
 function [descriptors] = image_descriptors(img_url, anot_url)
 %imt_url: path imatge
+%Aquesta funció extreu les propietats d'una imatge i les retorna com a una
+%cell-array.
 
 img = imread(img_url);
 load(anot_url);
 
 [f,c,z] = size(img);
 mask = poly2mask(obj_contour(1,:),obj_contour(2,:),f,c);
-figure,imshow(mask);
+subimg = img(box_coord(1):box_coord(2),box_coord(3):box_coord(4),:);
+
 %% Area
 area = sum(sum(mask(:,:)));
 
 
+%% Regionprops properties
 
+%Eccentricity: Ratio between major axis and minor axis
+%Solidity: Ratio between region area and convex hull area
+properties = regionprops(mask,'Eccentricity','Solidity','Area','Perimeter');
+[~,max_region] = max([properties.Area]);
 
 
 %% Perimeter
 %Euclidean distance between points:
-long_perimetre = sum(imabsdiff(obj_contour(2:end,:),obj_contour(1:end-1,:)));
+long_perimetre = properties(max_region).Perimeter;
 
-
-
-
-
-%% Compactitat
+%% Compactitat: Relació entre perímetre i àrea
 compactivitat = (long_perimetre*long_perimetre/area);
-
 
 
 %% Relació entre caixa englobant i animal
 
+box_height = box_coord(2) - box_coord(1);
+box_width = box_coord(4) - box_coord(3);
+area_box = box_height * box_width;
+
+compactivitat2 = area/area_box;
 
 
+%% Color of the animal
+
+%Find coordinates inside mask
+[rows cols] = find(mask);
+%RGB values of the animal
+RGBanimal=impixel(subimg,cols,rows);
+%Compute RGB color histogram
+histograma = reshape(numel(histo3(RGBanimal));
 
 %% Return descriptors
-descriptors = {area,long_perimetre,compactivitat};
+descriptors = {histograma,compactivitat,compactivitat2,properties(max_region).Eccentricity,properties(max_region).Solidity};
 
 end
 
