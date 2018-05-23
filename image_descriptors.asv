@@ -1,12 +1,21 @@
+
 function [descriptors] = image_descriptors(img_url, anot_url)
 %imt_url: path imatge
 %Aquesta funció extreu les propietats d'una imatge i les retorna com a una
 %cell-array.
 
+%Load contour and boundary box
 img = imread(img_url);
 load(anot_url);
 
+%Greyscale -> 3D
 [f,c,z] = size(img);
+if (z == 1)
+    face = img;
+    img(:,:,2) = face;
+    img(:,:,3) = face;
+end
+
 mask = poly2mask(obj_contour(1,:),obj_contour(2,:),f,c);
 subimg = img(box_coord(1):box_coord(2),box_coord(3):box_coord(4),:);
 
@@ -18,9 +27,9 @@ area = sum(sum(mask(:,:)));
 
 %Eccentricity: Ratio between major axis and minor axis
 %Solidity: Ratio between region area and convex hull area
-properties = regionprops(mask,'Eccentricity','Solidity','Area','Perimeter');
+properties = regionprops(mask,'Eccentricity','Solidity','Area','Perimeter','PixelIdxList');
 [~,max_region] = max([properties.Area]);
-
+mask(:,:,:) = 0
 
 %% Perimeter
 %Euclidean distance between points:
@@ -39,17 +48,54 @@ area_box = box_height * box_width;
 compactivitat2 = area/area_box;
 
 
-%% Color of the animal
+%% Histogram RGB -> Falta Millorar
 
 %Find coordinates inside mask
 [rows cols] = find(mask);
 %RGB values of the animal
-RGBanimal=impixel(subimg,cols,rows);
+HSVanimal=impixel(subimg,cols,rows);
 %Compute RGB color histogram
-histograma = reshape(numel(histo3(RGBanimal));
+histogramaRGB = histo3rgb(double(HSVanimal));
+histogramaRGB = reshape(histogramaRGB,1,numel(histogramaRGB));
+%Normalize histogram
+histogramaRGB = histogramaRGB./max(histogramaRGB);
+
+
+
+%% Histogram HSV -> Falta Millorar
+
+%Find coordinates inside mask
+[rows cols] = find(mask);
+%RGB values of the animal
+HSVanimal=impixel(rgb2hsv(subimg),cols,rows);
+%Compute RGB color histogram
+histogramaHSV = histo3hsv(HSVanimal);
+histogramaHSV = reshape(histogramaHSV,1,numel(histogramaHSV));
+%Normalize histogram
+histogramaHSV = histogramaHSV./max(histogramaHSV); 
+
+
+%% Gradient directions
+sob = fspecial('sobel');
+sobh= sob/4;
+resh=imfilter(double(mask),sobh,'conv');
+resv=imfilter(double(mask),sobh','conv');
+alfa =atan2(resv,resh);
+alfa = 255*(alfa+pi)/2/pi;
+histograd = hist(reshape(alfa,1,numel(alfa)),10);
+histograd = reshape(histograd,1,numel(histograd));
+histograd = histograd./max(histograd);
+
+
+%% Fourier descriptor
+
+%Countour:
+
+FD = gfd(centerobject(mask),3,12);
+
 
 %% Return descriptors
-descriptors = {histograma,compactivitat,compactivitat2,properties(max_region).Eccentricity,properties(max_region).Solidity};
+descriptors = {FD,histograd,compactivitat,compactivitat2,properties(max_region).Eccentricity,properties(max_region).Solidity};
 
 end
 
