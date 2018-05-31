@@ -64,10 +64,10 @@ compactivitat2 = area/area_box;
 
 %% Mean color of the region
 
-% red = img(:,:,1);
-% green = img(:,:,2);
-% blue = img(:,:,3);
-% meancolor = [mean(red(mask)),mean(green(mask)),mean(blue(mask))];
+red = img(:,:,1);
+green = img(:,:,2);
+blue = img(:,:,3);
+meancolor = [mean(red(mask)),mean(green(mask)),mean(blue(mask))];
 
 %% Histogram HSV (alternative)
 
@@ -124,7 +124,7 @@ grayprops = graycoprops(gcm,{'contrast','homogeneity','correlation'});
 
 %% Return descriptors
 
-descriptors = {histograd,FD,grayprops.Correlation,Entropy,grayprops.Contrast,grayprops.Homogeneity,compactivitat,compactivitat2,properties(max_region).Eccentricity,properties(max_region).Solidity};
+descriptors = {meancolor,histograd,FD,grayprops.Correlation,Entropy,grayprops.Contrast,grayprops.Homogeneity,compactivitat,compactivitat2,properties(max_region).Eccentricity,properties(max_region).Solidity};
 
 end
 
