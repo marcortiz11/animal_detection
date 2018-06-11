@@ -17,29 +17,29 @@ if (z == 1)
 end
 
 mask = poly2mask(obj_contour(1,:)+box_coord(3),obj_contour(2,:)+box_coord(1),f,c);
+descriptors = {};
 
 %% Region properties
 
-properties = regionprops(mask,'Eccentricity','Solidity','Area','Perimeter','PixelIdxList');
+properties = regionprops(mask,'Eccentricity','PixelIdxList','Solidity','Area','Perimeter','Centroid','BoundingBox','Orientation');
 [~,max_region] = max([properties.Area]);
 
-%Deleting minor regions (noise)
 mask(:,:) = 0;
 mask(properties(max_region).PixelIdxList) = 1;
+contour = xor(imerode(double(mask),strel('disk',1)),mask);
+descriptors{end+1} = properties(max_region).Eccentricity;
+descriptors{end+1} = properties(max_region).Solidity;
 
 
-%% Area
+%% Area & Perímetre
 
 area = properties(max_region).Area;
-
-%% Perimeter
-
 long_perimetre = properties(max_region).Perimeter;
 
 %% Compactitat: Relació entre perímetre i àrea
 
-compactivitat = (long_perimetre*long_perimetre/area);
-
+compactness = (long_perimetre*long_perimetre/area);
+descriptors{end+1} = compactness;
 
 %% Relació entre caixa englobant i animal
 
@@ -47,66 +47,56 @@ box_height = box_coord(2) - box_coord(1);
 box_width = box_coord(4) - box_coord(3);
 area_box = box_height * box_width;
 
-compactivitat2 = area/area_box;
-
+rectangularity = area/area_box;
+descriptors{end+1} = rectangularity;
 
 %% Histogram RGB
+[rows, cols] = find(mask);
+RGBanimal=impixel(suavitzar_gaussian(img),cols,rows);
+histogramaRGB = histo3rgb(double(RGBanimal));
+buckets = numel(histogramaRGB);
+histogramaRGB = reshape(histogramaRGB,1,buckets);
+histogramaRGB = histogramaRGB./max(max(histogramaRGB));
 
-% %Find coordinates inside mask
-% [rows, cols] = find(mask);
-% %RGB values of the animal
-% RGBanimal=impixel(img,cols,rows);
-% %Compute RGB color histogram
-% histogramaRGB = histo3rgb(double(RGBanimal));
-% histogramaRGB = reshape(histogramaRGB,1,numel(histogramaRGB));
-% %Normalize histogram
-% histogramaRGB = histogramaRGB./max(histogramaRGB);
+descriptors{end+1} = var(histogramaRGB);
+descriptors{end+1} = std(histogramaRGB);
+% %descriptors{end+1} = sum((1:buckets) .* (histogramaRGB));
+[~,C1] = kmeans(RGBanimal,2);
+C1(1) = C1(1)./sum(C1(1));
+C1(2) = C1(2)./sum(C1(2));
+C1=reshape(C1,1,2*3);
+descriptors{end+1} = C1;
 
-%% Mean color of the region
-
-red = img(:,:,1);
-green = img(:,:,2);
-blue = img(:,:,3);
-meancolor = [mean(red(mask)),mean(green(mask)),mean(blue(mask))];
 
 %% Histogram HSV (alternative)
 
-% %Find coordinates inside mask
+% Find coordinates inside mask
 % [rows, cols] = find(mask);
-% %RGB values of the animal
 % HSVanimal=impixel(rgb2hsv(suavitzar_gaussian(img)),cols,rows);
-% %Compute RGB color histogram
+% 
 % histogramaHSV = histo3hsv(HSVanimal);
-% histogramaHSV = reshape(histogramaHSV,1,numel(histogramaHSV));
-% %Normalize histogram
-% histogramaHSV = histogramaHSV./max(histogramaHSV); 
-
+% buckets = numel(histogramaHSV);
+% histogramaHSV = reshape(histogramaHSV,1,buckets);
+% histogramaHSV = histogramaHSV./max(max(histogramaHSV)); 
+%  [~,C2] = kmeans(HSVanimal(:,3:3),2);
+%  C2=reshape(C2,1,2);
+%  descriptors{end+1} = [C1,C2];
+% descriptors{end+1} = std(histogramaHSV);
+% descriptors{end+1} = sum((1:buckets) .* (histogramaHSV));
+% descriptors{end+1} = var(histogramaHSV);
+% descriptors{end+1} = mean(histogramaHSV);
 
 %% Histogram of Gradient Directions (HOG)
-% 
-contour = xor(imerode(double(mask),strel('disk',1)),mask);
-    
-sob = fspecial('sobel');
-sobh= sob/4;
-resh=imfilter(double(mask),sobh,'conv');
-resv=imfilter(double(mask),sobh','conv');
-alfa = atan2(resv,resh);
 
-buckets = 8;
-histograd = imhist(alfa(contour),buckets);
-histograd = reshape(histograd,1,numel(histograd));
-[m, index] = max(histograd);
-histograd = histograd./m;
-histograd = circshift(histograd,buckets-index);
+descriptors{end+1} = hog(mask,contour,8);
 
 
 %% Fourier Descriptor
 
 %Normalized fourier descriptor:
-FD = gfd(centerobject(mask),3,14);
+FD = gfd(centerobject(mask),3,16);
 FD = FD';
-
-
+descriptors{end+1} = FD;
 
 %% Texture: Entropy of the grey-scale animal
 
@@ -114,17 +104,82 @@ colormask = maskimagecolor(img,mask);
 gray = double(rgb2gray(colormask));
 gray = gray./max(max(gray));
 Entropy = entropy(gray);
+descriptors{end+1} = Entropy;
+descriptors{end+1} = stdfilt(gray);
 
 %% Texture: Properties of the grey-scale region
 
 erode = imerode(mask,strel('disk',2));
 gcm = graycomatrix(gray.*erode);
 grayprops = graycoprops(gcm,{'contrast','homogeneity','correlation'});
+descriptors{end+1} = grayprops.Correlation;
+descriptors{end+1} = grayprops.Contrast;
+descriptors{end+1} = grayprops.Homogeneity;
 
 
-%% Return descriptors
+%% Local Features 
 
-descriptors = {meancolor,histograd,FD,grayprops.Correlation,Entropy,grayprops.Contrast,grayprops.Homogeneity,compactivitat,compactivitat2,properties(max_region).Eccentricity,properties(max_region).Solidity};
+mask_centered = centerobject(mask);
+angle = properties(max_region).Orientation;
+mask_centered = imrotate(mask_centered,angle);
+contour_centered = imabsdiff(mask_centered , imerode(mask_centered,strel('disk',1)));
+
+properties_centered_rotated = regionprops(mask_centered,'BoundingBox','Extent','Area','Centroid');
+[~,max_region] = max([properties_centered_rotated.Area]);
+
+box_coord(1)=properties_centered_rotated(max_region).BoundingBox(1);
+box_coord(2)=properties_centered_rotated(max_region).BoundingBox(1) + properties_centered_rotated(max_region).BoundingBox(3);
+box_coord(3)=properties_centered_rotated(max_region).BoundingBox(2);
+box_coord(4)=properties_centered_rotated(max_region).BoundingBox(2)+properties_centered_rotated(max_region).BoundingBox(4);
+
+xinici = box_coord(1);
+xfinal = box_coord(2);
+yinici = box_coord(3);
+yfinal = box_coord(4);
+
+stepx = (xfinal-xinici)/3;
+stepy = (yfinal-yinici)/1;
+
+descriptors{end+1} = properties_centered_rotated(max_region).Extent;
+figure;
+k=1
+for i = yinici:stepy:yfinal-stepy
+    for j = xinici:stepx:xfinal-stepx
+        
+        submask = mask_centered(i:i+stepy,j:j+stepx);
+        subplot(1,3,k),imshow(submask);
+        subcontour = contour_centered(i:i+stepy,j:j+stepx);
+        subproperties = regionprops(submask,'Eccentricity','Extent','PixelIdxList','Solidity','Area','Perimeter','Centroid','BoundingBox','Orientation');
+        [~,max_region] = max([subproperties.Area]);
+        descriptors{end+1} = hog(submask,subcontour,8);
+        descriptors{end+1} = subproperties(max_region).Eccentricity;
+        descriptors{end+1} = subproperties(max_region).Solidity;
+        descriptors{end+1} = subproperties(max_region).Extent;
+        compactness = (subproperties(max_region).Perimeter*subproperties(max_region).Perimeter/area);
+        descriptors{end+1} = compactness;
+        k = k+1;
+    end
+end
+
+stepx = (xfinal-xinici)/1;
+stepy = (yfinal-yinici)/3;
+
+for i = yinici:stepy:yfinal-stepy
+    for j = xinici:stepx:xfinal-stepx
+        
+        submask = mask_centered(i:i+stepy,j:j+stepx);
+        subcontour = contour_centered(i:i+stepy,j:j+stepx);
+        subproperties = regionprops(submask,'Eccentricity','Extent','PixelIdxList','Solidity','Area','Perimeter','Centroid','BoundingBox','Orientation');
+        [~,max_region] = max([subproperties.Area]);
+        descriptors{end+1} = hog(submask,subcontour,8);
+        descriptors{end+1} = subproperties(max_region).Eccentricity;
+        descriptors{end+1} = subproperties(max_region).Solidity;
+        descriptors{end+1} = subproperties(max_region).Extent;
+        compactness = (subproperties(max_region).Perimeter*subproperties(max_region).Perimeter/area);
+        descriptors{end+1} = compactness;
+
+    end
+end
 
 end
 
