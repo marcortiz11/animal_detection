@@ -65,22 +65,21 @@ descriptors{end+1} = std(histogramaRGB);
 C1(1) = C1(1)./sum(C1(1));
 C1(2) = C1(2)./sum(C1(2));
 C1=reshape(C1,1,2*3);
-descriptors{end+1} = C1;
+% % descriptors{end+1} = C1;
 
 
 %% Histogram HSV (alternative)
-
 % Find coordinates inside mask
-% [rows, cols] = find(mask);
-% HSVanimal=impixel(rgb2hsv(suavitzar_gaussian(img)),cols,rows);
-% 
+[rows, cols] = find(mask);
+HSVanimal=impixel(rgb2hsv(suavitzar_gaussian(img)),cols,rows);
+
 % histogramaHSV = histo3hsv(HSVanimal);
 % buckets = numel(histogramaHSV);
 % histogramaHSV = reshape(histogramaHSV,1,buckets);
 % histogramaHSV = histogramaHSV./max(max(histogramaHSV)); 
-%  [~,C2] = kmeans(HSVanimal(:,3:3),2);
-%  C2=reshape(C2,1,2);
-%  descriptors{end+1} = [C1,C2];
+ [~,C2] = kmeans(HSVanimal(:,2:3),2);
+ C2=reshape(C2,1,2*2);
+ descriptors{end+1} = [C1,C2];
 % descriptors{end+1} = std(histogramaHSV);
 % descriptors{end+1} = sum((1:buckets) .* (histogramaHSV));
 % descriptors{end+1} = var(histogramaHSV);
@@ -119,9 +118,15 @@ descriptors{end+1} = grayprops.Homogeneity;
 
 %% Local Features 
 
-mask_centered = centerobject(mask);
 angle = properties(max_region).Orientation;
-mask_centered = imrotate(mask_centered,angle);
+mask_centered = imrotate(mask,-angle);
+
+p = regionprops(mask_centered,'Area','PixelIdxList');
+[~,m] = max([p.Area]);
+mask_centered(:,:) = 0;
+mask_centered(p(m).PixelIdxList) = 1;
+
+mask_centered = centerobject(mask_centered);
 contour_centered = imabsdiff(mask_centered , imerode(mask_centered,strel('disk',1)));
 
 properties_centered_rotated = regionprops(mask_centered,'BoundingBox','Extent','Area','Centroid');
@@ -141,13 +146,11 @@ stepx = (xfinal-xinici)/3;
 stepy = (yfinal-yinici)/1;
 
 descriptors{end+1} = properties_centered_rotated(max_region).Extent;
-figure;
-k=1
+
 for i = yinici:stepy:yfinal-stepy
     for j = xinici:stepx:xfinal-stepx
         
         submask = mask_centered(i:i+stepy,j:j+stepx);
-        subplot(1,3,k),imshow(submask);
         subcontour = contour_centered(i:i+stepy,j:j+stepx);
         subproperties = regionprops(submask,'Eccentricity','Extent','PixelIdxList','Solidity','Area','Perimeter','Centroid','BoundingBox','Orientation');
         [~,max_region] = max([subproperties.Area]);
@@ -157,7 +160,7 @@ for i = yinici:stepy:yfinal-stepy
         descriptors{end+1} = subproperties(max_region).Extent;
         compactness = (subproperties(max_region).Perimeter*subproperties(max_region).Perimeter/area);
         descriptors{end+1} = compactness;
-        k = k+1;
+
     end
 end
 
